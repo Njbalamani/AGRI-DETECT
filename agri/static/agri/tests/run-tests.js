@@ -287,6 +287,32 @@ test("filterHistory matches search text, risk, method and due state", () => {
   assert.strictEqual(window.historyTest.filterHistory(records, { due: true }).length, 1);
 });
 
+test("filterHistory supports zone and inclusive date-range filters", () => {
+  const records = [
+    { id: 1, crop: "Date Palm", risk: "low", zone: "Block A", date: "2026-09-01" },
+    { id: 2, crop: "Mango", risk: "low", zone: "Block B", date: "2026-09-05" },
+    { id: 3, crop: "Date Palm", risk: "high", zone: "Block A", date: "2026-09-10" },
+  ];
+  assert.deepStrictEqual(window.historyTest.filterHistory(records, { zone: "BLOCK a" }).map((r) => r.id), [1, 3]);
+  assert.deepStrictEqual(window.historyTest.filterHistory(records, { from: "2026-09-05", to: "2026-09-10" }).map((r) => r.id), [2, 3]);
+  assert.strictEqual(window.historyTest.filterHistory(records, { from: "2026-09-12" }).length, 0);
+});
+
+test("historyAnalytics counts risk, crop and zone and renders bars", () => {
+  const data = window.historyTest.historyAnalytics([
+    { crop: "Date Palm — healthy", zone: "Block A", risk: "high" },
+    { crop: "Date Palm", zone: "Block A", risk: "high" },
+    { crop: "Mango", zone: "Block B", risk: "low" },
+  ]);
+  assert.strictEqual(data.total, 3);
+  assert.strictEqual(data.risk[riskLabel("high")], 2);
+  assert.strictEqual(data.crop["Date Palm"], 2);
+  assert.strictEqual(data.zone["Block A"], 2);
+  const html = window.historyTest.historyBars(data.risk, 5);
+  assert.ok(html.includes("bar-fill"));
+  assert.ok(html.includes(riskLabel("high")));
+});
+
 test("markFollowUpDone persists the acknowledgement for a due record", () => {
   localStorage.setItem("agri_history", JSON.stringify([
     { id: 1, risk: "high", followUpAt: Date.now() - 1000, followUpDone: false },
@@ -357,6 +383,27 @@ test("imageHealthScore calls a flat low-contrast photo 'blurry'", async () => {
   setPixels(GRAY_PX);
   const m = await imageHealthScore("data:image/jpeg;base64,C");
   assert.strictEqual(m.note, "blurry");
+});
+
+test("acceptCapture asks for a retake before storing a blurry photo", async () => {
+  setPixels(GRAY_PX);
+  window.agriTest.setShots([null, null]);
+  const before = window.agriTest.getShots().slice();
+  const accepted = await window.agriTest.acceptCapture("data:image/jpeg;base64,C");
+  assert.strictEqual(accepted, false);
+  assert.deepStrictEqual(window.agriTest.getShots(), before);
+});
+
+test("riskReasons explains the verdict with findings, method and disease", () => {
+  const reasons = window.agriTest.riskReasons(
+    { risk: "high", method: "local", findings: ["unclear_view"] },
+    { disease: { name: "Red Palm Weevil", confidence: 0.8 } },
+    82
+  );
+  assert.ok(reasons.some((r) => r.indexOf(t("high_label")) !== -1));
+  assert.ok(reasons.some((r) => r.indexOf(t("f_unclear_view")) !== -1));
+  assert.ok(reasons.some((r) => r.indexOf(t("method_local")) !== -1));
+  assert.ok(reasons.some((r) => r.indexOf("Red Palm Weevil") !== -1));
 });
 
 test("imageHealthScore never throws and returns neutral defaults on decode error", async () => {
@@ -524,7 +571,8 @@ test("new UI keys resolve in all eight languages", () => {
     "history_search_ph", "risk_all", "risk_low", "risk_medium", "risk_high",
     "method_all", "due_rechecks", "export_csv", "sync_history", "no_matching",
     "mark_recheck_done", "save_failed", "model_loaded", "model_unavailable",
-    "disease_prediction",
+    "disease_prediction", "analytics_title", "risk_trend", "by_crop", "by_zone",
+    "date_from", "date_to", "blur_retake", "why_risk",
   ];
   const old = window.LANG;
   for (const lang of ["en", "ta", "hi", "te", "kn", "ml", "bn", "mr"]) {

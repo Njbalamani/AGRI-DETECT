@@ -58,12 +58,15 @@ Key paths:
 - Optional health and disease models are loaded lazily via TensorFlow.
 - Result chip distinguishes Python model analysis from local signal analysis.
 - TensorFlow.js bundle, browser model files and browser conversion tooling removed.
+- Multi-image upload fills the remaining guided slots and warns on blurry photos.
+- Result card includes a plain-language explanation of the risk verdict.
 
 ### History and PWA
 - Local storage history, filters, CSV export and 48-hour recheck markers.
+- Risk, crop and zone charts plus zone and date-range filters are available in History.
 - Django sync endpoint upserts records by client ID.
 - Service worker caches the application shell and bypasses `/api/`.
-- Cache version bumped to `agridetect-v49`.
+- Cache version bumped to `agridetect-v50`.
 
 ### Documentation and repository
 - Root README documents repository structure, Mermaid diagrams, setup and ML commands.

@@ -326,9 +326,32 @@ function tick() {
   requestAnimationFrame(tick);
 }
 
-function doCapture() {
-  shots[currentStep] = captureToDataUrl();
+async function acceptCapture(dataUrl) {
+  let metrics = null;
+  try {
+    metrics = await imageHealthScore(dataUrl);
+  } catch (e) {
+    metrics = null;
+  }
+  const ask = typeof window.confirm === "function" ? window.confirm
+    : (typeof confirm === "function" ? confirm : null);
+  if (metrics && metrics.note === "blurry" && ask) {
+    if (ask(t("blur_retake"))) {
+      const line = document.getElementById("status-line");
+      if (line) {
+        line.textContent = t("f_too_blurry");
+        line.className = "line mid";
+      }
+      return false;
+    }
+  }
+  shots[currentStep] = dataUrl;
   advanceAfterShot();
+  return true;
+}
+
+async function doCapture() {
+  await acceptCapture(captureToDataUrl());
 }
 
 function advanceAfterShot() {
@@ -351,24 +374,40 @@ function advanceAfterShot() {
   }
 }
 
-function onFileChosen() {
-  const f = fileInput.files && fileInput.files[0];
-  if (!f) return;
-  fileInput.value = "";
-  const r = new FileReader();
-  r.onload = () => {
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(file);
+  });
+}
+
+function resizeUploadedFile(dataUrl) {
+  return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
       const c = document.createElement("canvas");
       c.width = CAP_WIDTH;
       c.height = Math.round((img.height / img.width) * CAP_WIDTH);
       c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-      shots[currentStep] = c.toDataURL("image/jpeg", CAP_QUALITY);
-      advanceAfterShot();
+      resolve(c.toDataURL("image/jpeg", CAP_QUALITY));
     };
-    img.src = r.result;
-  };
-  r.readAsDataURL(f);
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+async function onFileChosen() {
+  const files = Array.from((fileInput.files && fileInput.files.length) ? fileInput.files : []);
+  fileInput.value = "";
+  if (!files.length) return;
+  for (const file of files) {
+    if (currentStep >= STEPS.length) break;
+    const dataUrl = await resizeUploadedFile(await readFileAsDataUrl(file));
+    const accepted = await acceptCapture(dataUrl);
+    if (!accepted) break;
+  }
 }
 
 function finishedCapture() {
@@ -714,6 +753,23 @@ function riskSolution(r) {
   return { no_plant: t("np_sol"), low: t("low_sol"), medium: t("med_sol"), high: t("high_sol") }[r];
 }
 
+function riskReasons(analysis, ml, confidence) {
+  const reasons = [];
+  const meta = riskMeta(analysis.risk);
+  const label = meta && meta.label ? meta.label : riskLabel(analysis.risk);
+  reasons.push(label + " · " + t("confidence") + " " + confidence + "%");
+  const findings = Array.isArray(analysis.findings) ? analysis.findings.map(findingText) : [];
+  findings.forEach((f) => { if (f) reasons.push(f); });
+  const method = analysis.method === "vision" ? t("method_vision")
+    : (analysis.method === "model" ? t("method_model") : t("method_local"));
+  reasons.push(method);
+  if (ml && ml.disease && ml.disease.name) {
+    reasons.push(fill(t("disease_prediction"), { D: ml.disease.name }) + " " +
+      Math.round((Number(ml.disease.confidence) || 0) * 100) + "%");
+  }
+  return reasons.filter((r, i) => r && reasons.indexOf(r) === i);
+}
+
 function cropFromQuery() {
   const p = new URLSearchParams(window.location.search || "");
   function value(key, fallback, max) {
@@ -796,6 +852,9 @@ async function runAnalysis() {
   const findingsEl = document.getElementById("result-findings");
   const findings = (analysis.findings || []).map(findingText).join(" · ");
   findingsEl.textContent = findings ? "🩺 " + findings : "";
+  const reasons = riskReasons(analysis, ml, confidence);
+  const reasonsEl = document.getElementById("risk-reasons");
+  if (reasonsEl) reasonsEl.innerHTML = reasons.map((r) => "<li>" + esc(r) + "</li>").join("");
   const chip = document.getElementById("method-chip");
   const methodLabel = analysis.method === "vision" ? t("method_vision")
     : (analysis.method === "model" ? t("method_model") : t("method_local"));
@@ -816,6 +875,7 @@ async function runAnalysis() {
   window._currentConfidence = confidence;
   window._currentMethod = analysis.method;
   window._currentFindings = (analysis.findings || []).join(", ");
+  window._currentReasons = reasons;
   window._currentGuidance = guidance;
   window._currentDisease = disease;
   show("result");
@@ -1041,6 +1101,9 @@ window.agriTest = {
   saveToHistory: saveToHistory,
   modelStatus: modelStatus,
   classifyDisease: classifyDisease,
+  riskReasons: riskReasons,
+  acceptCapture: acceptCapture,
+  resizeUploadedFile: resizeUploadedFile,
 };
 
 /* init */

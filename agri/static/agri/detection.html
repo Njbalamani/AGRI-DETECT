@@ -86,7 +86,7 @@
           <button id="shutter" class="shutter" disabled data-i18n="capture_btn">Capture</button>
           <button id="pick-cam" class="btn ctrl-pick hidden" data-i18n="pick_photo_btn">Choose photo</button>
         </div>
-        <input type="file" id="file-input" accept="image/*" capture="environment" hidden>
+        <input type="file" id="file-input" accept="image/*" multiple hidden>
       </div>
     </section>
 
@@ -108,6 +108,10 @@
         <h3 id="result-title"></h3>
         <p id="result-message"></p>
         <p id="result-findings" class="result-findings"></p>
+        <div id="risk-explanation" class="explanation-card">
+          <h3 data-i18n="why_risk">Why this result</h3>
+          <ul id="risk-reasons"></ul>
+        </div>
         <span id="method-chip" class="method-chip"></span>
         <span id="model-chip" class="method-chip"></span>
       </div>

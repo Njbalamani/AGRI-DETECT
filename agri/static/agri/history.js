@@ -126,15 +126,31 @@ function historyCsv(history) {
   return [columns.map(([label]) => csvCell(label)).join(",")].concat(rows).join("\r\n");
 }
 
+function historyRecordDate(rec) {
+  const raw = rec && (rec.sourceUpdatedAt || rec.date || rec.timestamp || rec.createdAt);
+  if (!raw) return null;
+  const text = String(raw).trim();
+  const dayOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  if (dayOnly) return new Date(Number(dayOnly[1]), Number(dayOnly[2]) - 1, Number(dayOnly[3]));
+  const parsed = new Date(text.replace(/,/g, " "));
+  return isNaN(parsed.getTime()) ? null : parsed;
+}
+
 function currentHistoryFilters() {
   const search = document.getElementById("history-search");
   const risk = document.getElementById("history-risk");
   const method = document.getElementById("history-method");
+  const zone = document.getElementById("history-zone");
+  const from = document.getElementById("history-from");
+  const to = document.getElementById("history-to");
   const due = document.getElementById("history-due");
   return {
     search: (search && search.value ? search.value : "").trim().toLowerCase(),
     risk: (risk && risk.value ? risk.value : "all"),
     method: (method && method.value ? method.value : "all"),
+    zone: (zone && zone.value ? zone.value : "").trim().toLowerCase(),
+    from: from && from.value ? from.value : "",
+    to: to && to.value ? to.value : "",
     due: !!(due && due.checked),
   };
 }
@@ -144,9 +160,16 @@ function filterHistory(history, filters) {
   const term = (f.search || "").trim().toLowerCase();
   const risk = f.risk || "all";
   const method = f.method || "all";
+  const zone = (f.zone || "").trim().toLowerCase();
   return (Array.isArray(history) ? history : []).filter((rec) => {
     if (risk !== "all" && riskClass(rec.risk) !== risk) return false;
     if (method !== "all" && (rec.method || "") !== method) return false;
+    if (zone && String(rec.zone || "").toLowerCase().indexOf(zone) === -1) return false;
+    if (f.from || f.to) {
+      const date = historyRecordDate(rec);
+      if (f.from && (!date || date < new Date(f.from + "T00:00:00"))) return false;
+      if (f.to && (!date || date > new Date(f.to + "T23:59:59.999"))) return false;
+    }
     if (f.due && !(rec.followUpAt && !rec.followUpDone)) return false;
     if (!term) return true;
     const haystack = [
@@ -154,6 +177,50 @@ function filterHistory(history, filters) {
       rec.guidance, rec.note, rec.method, historyMethodLabel(rec.method),
     ].map((v) => (v === null || v === undefined ? "" : String(v))).join(" ").toLowerCase();
     return haystack.indexOf(term) !== -1;
+  });
+}
+
+function historyAnalytics(history) {
+  const risk = {};
+  const crop = {};
+  const zone = {};
+  const add = (map, key) => { if (key) map[key] = (map[key] || 0) + 1; };
+  (Array.isArray(history) ? history : []).forEach((rec) => {
+    const riskName = typeof riskLabel === "function" ? riskLabel(rec.risk) : String(rec.risk || "");
+    add(risk, String(riskName || ""));
+    const cropName = String(rec.crop || "").replace(/ — .*$/, "").trim();
+    add(crop, cropName);
+    add(zone, String(rec.zone || "").trim());
+  });
+  return { risk: risk, crop: crop, zone: zone, total: (Array.isArray(history) ? history.length : 0) };
+}
+
+function historyBars(counts, limit) {
+  const entries = Object.keys(counts || {})
+    .map((key) => [key, Number(counts[key]) || 0])
+    .filter((entry) => entry[0] && entry[1] > 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit || 6);
+  if (!entries.length) return '<div class="chart-empty">—</div>';
+  const max = entries.reduce((m, entry) => Math.max(m, entry[1]), 0) || 1;
+  return entries.map((entry) => {
+    const pct = Math.max(4, Math.round((entry[1] / max) * 100));
+    return '<div class="bar-row"><span class="bar-label">' + esc(entry[0]) + '</span>' +
+      '<span class="bar-track"><span class="bar-fill" style="width:' + pct + '%"></span></span>' +
+      '<span class="bar-count">' + entry[1] + "</span></div>";
+  }).join("");
+}
+
+function renderHistoryAnalytics(history) {
+  const data = historyAnalytics(history);
+  const targets = [
+    ["risk-chart", data.risk, 5],
+    ["crop-chart", data.crop, 6],
+    ["zone-chart", data.zone, 6],
+  ];
+  targets.forEach(([id, counts, limit]) => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = historyBars(counts, limit);
   });
 }
 
@@ -284,6 +351,7 @@ function openHistoryDetail(rec) {
 function renderHistory() {
   const all = loadHistory();
   const history = filterHistory(all, currentHistoryFilters());
+  renderHistoryAnalytics(history);
   const list = document.getElementById("history-list");
   const count = document.getElementById("count");
 
@@ -316,7 +384,7 @@ function renderHistory() {
 }
 
 function wireHistoryControls() {
-  ["history-search", "history-risk", "history-method", "history-due"].forEach((id) => {
+  ["history-search", "history-risk", "history-method", "history-zone", "history-from", "history-to", "history-due"].forEach((id) => {
     const el = document.getElementById(id);
     if (!el) return;
     const event = el.type === "checkbox" || el.tagName === "SELECT" ? "change" : "input";
@@ -354,6 +422,9 @@ window.historyTest = {
   parseHistory: parseHistory,
   historyCsv: historyCsv,
   filterHistory: filterHistory,
+  historyRecordDate: historyRecordDate,
+  historyAnalytics: historyAnalytics,
+  historyBars: historyBars,
   historyMethodLabel: historyMethodLabel,
   markFollowUpDone: markFollowUpDone,
   mergeRecords: mergeRecords,

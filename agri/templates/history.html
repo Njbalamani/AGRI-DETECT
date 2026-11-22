@@ -37,6 +37,21 @@
       <p data-i18n="history_desc">A digital record of every palm screen — one of the four project objectives (digital record for all 110 palms).</p>
     </section>
 
+    <section class="analytics-grid" aria-label="History insights">
+      <div class="analytics-card">
+        <h3 data-i18n="risk_trend">Risk trend</h3>
+        <div id="risk-chart" class="chart-bars"></div>
+      </div>
+      <div class="analytics-card">
+        <h3 data-i18n="by_crop">By crop</h3>
+        <div id="crop-chart" class="chart-bars"></div>
+      </div>
+      <div class="analytics-card">
+        <h3 data-i18n="by_zone">By zone</h3>
+        <div id="zone-chart" class="chart-bars"></div>
+      </div>
+    </section>
+
     <div class="history-toolbar" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px">
       <input id="history-search" type="search" placeholder="Search crop, palm ID, zone or finding" data-i18n-attr="placeholder|history_search_ph" aria-label="Search records" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;font-size:.9rem">
       <select id="history-risk" aria-label="Filter by risk" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;font-size:.9rem">
@@ -51,6 +66,15 @@
         <option value="model" data-i18n="method_model">Python AI model</option>
         <option value="vision" data-i18n="method_vision">AI vision model</option>
       </select>
+      <input id="history-zone" type="search" placeholder="Block A" data-i18n-attr="placeholder|result_zone_ph" aria-label="Filter by zone" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;font-size:.9rem">
+      <label style="display:flex;flex-direction:column;gap:6px;font-size:.85rem;color:var(--muted)">
+        <span data-i18n="date_from">From date</span>
+        <input id="history-from" type="date" aria-label="From date" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;font-size:.9rem">
+      </label>
+      <label style="display:flex;flex-direction:column;gap:6px;font-size:.85rem;color:var(--muted)">
+        <span data-i18n="date_to">To date</span>
+        <input id="history-to" type="date" aria-label="To date" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;font-size:.9rem">
+      </label>
       <label style="display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--muted)">
         <input id="history-due" type="checkbox"> <span data-i18n="due_rechecks">Due rechecks</span>
       </label>
