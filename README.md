@@ -19,6 +19,27 @@ The app uses a Python/Django ML backend for photo analysis, with a multilingual 
 
 ---
 
+## Final update — what changed
+
+All ML work now runs in Python/Django. TensorFlow.js was removed from the browser app, and the browser only sends captured images to the Django ML API.
+
+| Area | Change |
+|---|---|
+| Python ML | Added `agri/ml/` with `predict.py`, `train.py`, `evaluate.py` and package exports. |
+| Django API | Added `GET /api/ml/status` and `POST /api/ml/predict`; routes are defined before the static catch-all. |
+| Browser detection | `detection.js` now calls the Python ML API instead of loading or running browser ML models. |
+| Browser assets | Removed `vendor/tf.min.js`, `models/plant-health/*`, TF.js script tags, TF.js service-worker entries and TFJS conversion tooling. |
+| Training | Added `requirements-ml.txt`; health and disease training now produce `.keras` Python models. |
+| Dependencies | `requirements.txt` now includes Django, Pillow and NumPy. |
+| Localization | Updated model/method labels in all eight languages to Python wording. |
+| Tests | Added Django ML API/logic tests and Node tests for the Python API client; removed TF.js asset expectations. |
+| Documentation | App README, test README, report and this root README now describe the Python-only architecture. |
+| PWA | Service worker cache bumped to `agridetect-v49` and API routes are kept out of the offline cache. |
+
+Final verification: Node tests `48 passed, 0 failed`; Django tests `15 tests OK`; Django check reported no issues; Python and JavaScript syntax checks passed. The update is pushed to GitHub `main`.
+
+---
+
 ## Repository structure
 
 ```text
