@@ -1,7 +1,10 @@
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 from django.test import SimpleTestCase, TestCase
+
+from ml.predict import aggregate_predictions, decode_data_url, health_to_risk
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -32,10 +35,6 @@ ASSET_PATHS = [
     "/sw-register.js",
     "/service-worker.js",
     "/manifest.json",
-    "/vendor/tf.min.js",
-    "/models/plant-health/model.json",
-    "/models/plant-health/group1-shard1of2.bin",
-    "/models/plant-health/group1-shard2of2.bin",
     "/images/01-date-palm.jpg",
     "/icons/icon-192.png",
 ]
@@ -129,3 +128,62 @@ class AgriHistorySyncTests(TestCase):
         fetched = self.client.get("/api/history/sync?since=0").json()
         record = next(r for r in fetched["records"] if r["id"] == "demo-2")
         self.assertEqual(record["zone"], "A")
+
+
+class AgriMlLogicTests(SimpleTestCase):
+    def test_health_to_risk_boundaries(self):
+        self.assertEqual(health_to_risk(0.9)["risk"], "low")
+        self.assertEqual(health_to_risk(0.4)["risk"], "medium")
+        self.assertEqual(health_to_risk(0.1)["risk"], "high")
+
+    def test_aggregate_predictions_uses_python_model_result(self):
+        result = aggregate_predictions([
+            {"score": 0.92, "source": "python_model", "error": None},
+            {"score": 0.88, "source": "python_model", "error": None},
+        ])
+        self.assertEqual(result["risk"], "low")
+        self.assertEqual(result["method"], "model")
+        self.assertTrue(result["model_used"])
+
+    def test_decode_data_url_rejects_invalid_input(self):
+        with self.assertRaises(ValueError):
+            decode_data_url("not-an-image")
+
+
+class AgriMlApiTests(SimpleTestCase):
+    def test_status_endpoint_reports_python_backend(self):
+        response = self.client.get("/api/ml/status")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["backend"], "python")
+
+    def test_predict_rejects_empty_images(self):
+        response = self.client.post(
+            "/api/ml/predict",
+            data=json.dumps({"images": []}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    @patch("core.views.analyse_images")
+    def test_predict_returns_python_analysis(self, analyse):
+        analyse.return_value = {
+            "risk": "low",
+            "confidence": 92,
+            "score": 0.94,
+            "method": "model",
+            "model_used": True,
+            "disease": None,
+        }
+        response = self.client.post(
+            "/api/ml/predict",
+            data=json.dumps({"images": ["data:image/jpeg;base64,QUJD"]}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["risk"], "low")
+        self.assertEqual(data["method"], "model")
+        analyse.assert_called_once()

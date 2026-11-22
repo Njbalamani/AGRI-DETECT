@@ -1,74 +1,51 @@
-# AGRI-DETECT — Unit Tests
+# AGRI-DETECT browser test suite
 
-Zero-dependency unit test suite for the real application source. It loads the
-actual `problems.js / langs.js / i18n.js / app.js / history.js / detection.js /
-chatbot.js` files into a stubbed browser environment and asserts the **pure
-logic** — risk scoring, JSON parsing, the healthy-vs-damage pixel analysis, the
-safety gates, the multilingual chatbot engine, and the history storage schema.
+The browser tests are a zero-dependency Node runner for the real JavaScript files in `static/agri/`. They stub the DOM, canvas, image loading, local storage and network access, so no browser, camera or server is required.
 
-## Run it
+Run from the repository root:
 
-Requires **Node.js ≥ 18** (uses the built-in `assert` module — nothing to
-install).
-
-```bash
-node tests/run-tests.js
+```powershell
+node static/agri/tests/run-tests.js
 ```
 
-Exit code is `0` when every test passes, `1` on any failure.
+Current result: `48 passed, 0 failed`.
 
-## What is covered (48 assertions)
+## Coverage
 
 | Area | What is verified |
 |---|---|
-| **i18n / DOM safety** | `riskClass()` mappings (incl. legacy `med`, unknown → `low`); `esc()` HTML-escaping (XSS guard); `fill()` placeholder replacement |
-| **Catalogue search** | full 30-crop list on empty term; problem-name + case-insensitive hits; display-name match |
-| **Parse layer** | `extractJson()` object extraction + graceful `null` on garbage; `parseVisionJson()` risk whitelist, confidence clamping, issues slicing |
-| **Pixel health analysis** | green photo → `healthy`; brown-heavy photo → `damage`; low-contrast → `blurry`; decode error → neutral defaults, never a throw |
-| **Safety gates** | NOT-A-PLANT gate returns `no_plant`; six clean green photos → `low` / `looks_healthy` |
-| **Health → risk** | score-to-risk boundaries, confidence widening and out-of-range clamping |
-| **Crop-aware results** | query parsing, dynamic page title, crop-specific guidance, `no_plant` skip |
-| **Provider selection** | saved key alone never enables vision/chat network calls unless Gemini is selected |
-| **Field records** | palm ID, zone, guidance, disease prediction and 48-hour follow-up persisted by `saveToHistory()` |
-| **Localization** | all 19 new UI keys resolve in each of the 8 language packs |
-| **Chatbot (KB engine)** | exact problem lookup; crop+symptom query; bare-crop list; greeting/app intents; config loading; normalization |
-| **History storage** | demo-seed, save→load round-trip, corrupt JSON fallback, filters, CSV quoting, recheck acknowledgement |
-| **History sync** | `mergeRecords()` de-duplicates by ID and prefers newer records; `syncHistory()` fails safely without fetch |
-| **Model pipeline** | `imageModelHealth()` returns `null` without a loaded model; `modelStatus()` reports v43; `classifyDisease()` is safe without an optional model; model never auto-loads without TensorFlow.js |
+| Shared helpers | HTML escaping, placeholder replacement and DOM key filling. |
+| Knowledge base | Crop search, problem lookup, legacy solution format and language fallback. |
+| History | Storage schema, corrupt-data safety, filters, labels, CSV quoting and follow-up state. |
+| Detection | Health thresholds, JSON parsing, pixel health scoring and safety gates. |
+| Python ML client | `predictFromApi()` fails safely when the API is unreachable. |
+| Localization | New UI keys resolve in all eight languages. |
+| Chatbot | Query normalization, answer indexing, intents and provider gating. |
+| Sync client | Merge behavior and safe failure without `fetch`. |
 
-## How it works
+The suite also reads `detection.js` directly and asserts that browser model code is gone: no `tf.min.js`, no `tensor`, and no `tf.loadGraphModel`.
 
-- `tests/run-tests.js` sets up **browser stubs** (`window`, `document`,
-  `localStorage`, `navigator`, `Image`, a canvas 2D-context whose pixel buffer
-  tests inject, …).
-- All app source files are concatenated and evaluated in **one sloppy-mode
-  scope**, so cross-file references keep working exactly as they do in a page.
-- Pure units are reached through the same, behavior-neutral **test hooks** that
-  the app now ships:
-  - `window.agriTest` (detection.js) — `localAnalyse`, `imageHealthScore`,
-    `healthToRisk`, `extractJson`, `parseVisionJson`, `setShots`,
-    `cropFromQuery`, `cropLabel`, `cropGuidance`, `visionAnalyse`,
-    `detectionCfg`, `saveToHistory`, `modelStatus`, `classifyDisease`,
-    `initDiseaseModel`
-  - `window.cbTest` (chatbot.js) — `match`, `kbAnswer`, `norm`, `buildIndex`,
-    `tokenPick`, `isBareCrop`, `loadCfg`, `liveProviderEnabled`
-  - `window.historyTest` (history.js) — `loadHistory`, `saveHistory`,
-    `STORAGE_KEY`, `parseHistory`, `historyCsv`, `filterHistory`,
-    `historyMethodLabel`, `markFollowUpDone`, `mergeRecords`, `syncHistory`
+## Test hooks
 
-These hooks are test-only surface; none of them change runtime behavior.
+`detection.js` exposes a small `window.agriTest` object only for this runner:
 
-## Testing pyramid (how unit tests fit the whole app)
+| Hook | Purpose |
+|---|---|
+| `setShots(arr)` | Inject synthetic photo data URLs. |
+| `getShots()` | Read injected photos. |
+| `localAnalyse(ml)` | Run local analysis with an optional Python API result. |
+| `imageHealthScore(dataUrl)` | Run single-photo pixel analysis. |
+| `predictFromApi(dataUrls)` | Call the Python ML API; resolves `null` when unavailable. |
+| `healthToRisk(score)` | Map score to risk and confidence. |
+| `extractJson(text)` | Parse JSON embedded in model text. |
+| `parseVisionJson(value)` | Normalize optional Gemini vision output. |
+| `resizeDataUrl(dataUrl)` | Verify resize behavior with stubbed canvases. |
+| `currentSteps()` | Read capture steps. |
+| `cropFromQuery()`, `cropLabel()`, `cropGuidance()` | Crop query parsing and guidance. |
+| `visionAnalyse()` | Verify provider gating. |
+| `detectionCfg()` | Read saved AI configuration. |
+| `saveToHistory()` | Persist a result through the history module. |
+| `modelStatus()` | Report Python backend status. |
+| `classifyDisease(dataUrl)` | Return optional disease data from Python; fails safely. |
 
-1. **Unit tests (this folder)** — deterministic, headless, ~instant: pure code
-   and safety-gate decisions.
-2. **Browser smoke checks** — after any change, load the app and run the
-   detection flow with the 📷 + photo-picker fallback on a phone over HTTPS
-   (see `VALIDATION.md`).
-3. **Model evaluation** — 30,295-photo held-out test set reported in the README
-   measures real generalization of the on-device classifier.
-4. **Field validation** — qualitative sessions with farmers (see `VALIDATION.md`).
-   Manual checks are labelled `captNN` in the dev log.
-
-Before submitting a review, run `node tests/run-tests.js` and confirm
-**48 passed, 0 failed**.
+No rendering, camera or real network path is exposed.

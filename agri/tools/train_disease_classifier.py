@@ -1,7 +1,5 @@
 import argparse
 import json
-import shutil
-import subprocess
 from pathlib import Path
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp"}
@@ -54,28 +52,27 @@ def validate_data_dir(data_path):
     return class_names
 
 
-def remove_path(path):
-    if path.is_symlink() or path.is_file():
-        path.unlink()
-    elif path.exists():
-        shutil.rmtree(path)
-
-
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Train a MobileNetV2 disease classifier")
+    parser = argparse.ArgumentParser(description="Train a Python MobileNetV2 disease classifier")
     parser.add_argument("--data", default="dataset/disease")
-    parser.add_argument("--output", default="static/agri/models/disease")
+    parser.add_argument("--model", default="ml_models/disease.keras")
+    parser.add_argument("--classes", default="ml_models/disease_classes.json")
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--image-size", type=int, default=224)
+    parser.add_argument("--validation-split", type=float, default=0.2)
     args = parser.parse_args(argv)
 
     if args.epochs <= 0 or args.batch_size <= 0 or args.image_size <= 0:
         print("Error: --epochs, --batch-size, and --image-size must be positive integers.")
         return 1
+    if not 0 <= args.validation_split < 1:
+        print("Error: --validation-split must be between 0 and 1.")
+        return 1
 
     data_path = Path(args.data)
-    output_path = Path(args.output)
+    model_path = Path(args.model)
+    classes_path = Path(args.classes)
     class_names = validate_data_dir(data_path)
     if class_names is None:
         return 1
@@ -83,7 +80,7 @@ def main(argv=None):
     try:
         import tensorflow as tf
     except Exception as exc:
-        print("Error: TensorFlow is not available. Install it with 'python -m pip install tensorflow' and rerun.")
+        print("Error: TensorFlow is unavailable. Install requirements-ml.txt first.")
         print(f"Details: {exc}")
         return 1
 
@@ -98,10 +95,27 @@ def main(argv=None):
             color_mode="rgb",
             image_size=(args.image_size, args.image_size),
             batch_size=args.batch_size,
+            validation_split=args.validation_split,
+            subset="training",
             shuffle=True,
             seed=42,
         )
-        train_ds = train_ds.prefetch(buffer_size=tf.data.AUTOTUNE)
+        val_ds = tf.keras.utils.image_dataset_from_directory(
+            str(data_path),
+            labels="inferred",
+            label_mode="int",
+            class_names=class_names,
+            color_mode="rgb",
+            image_size=(args.image_size, args.image_size),
+            batch_size=args.batch_size,
+            validation_split=args.validation_split,
+            subset="validation",
+            shuffle=True,
+            seed=42,
+        )
+        autotune = tf.data.AUTOTUNE
+        train_ds = train_ds.prefetch(buffer_size=autotune)
+        val_ds = val_ds.prefetch(buffer_size=autotune)
     except Exception as exc:
         print(f"Error: could not load images from '{data_path}': {exc}")
         return 1
@@ -131,81 +145,21 @@ def main(argv=None):
 
     print(f"Training for {args.epochs} epochs...")
     try:
-        model.fit(train_ds, epochs=args.epochs)
-    except Exception as exc:
-        print(f"Error: training failed: {exc}")
-        return 1
-
-    saved_model_path = output_path / "saved_model"
-    tfjs_path = output_path / "tfjs_model"
-    class_names_path = output_path / "class_names.json"
-
-    try:
-        output_path.mkdir(parents=True, exist_ok=True)
-        remove_path(saved_model_path)
-        remove_path(tfjs_path)
-    except OSError as exc:
-        print(f"Error: cannot prepare output directory '{output_path}': {exc}")
-        return 1
-
-    try:
-        with class_names_path.open("w", encoding="utf-8") as handle:
+        model.fit(train_ds, validation_data=val_ds, epochs=args.epochs)
+        model_path.parent.mkdir(parents=True, exist_ok=True)
+        classes_path.parent.mkdir(parents=True, exist_ok=True)
+        model.save(model_path)
+        with classes_path.open("w", encoding="utf-8") as handle:
             json.dump(class_names, handle, indent=2)
             handle.write("\n")
-    except OSError as exc:
-        print(f"Error: cannot write class names file '{class_names_path}': {exc}")
-        return 1
-
-    @tf.function(
-        input_signature=[
-            tf.TensorSpec(
-                shape=[None, args.image_size, args.image_size, 3],
-                dtype=tf.float32,
-                name="images",
-            )
-        ]
-    )
-    def serving_fn(images):
-        return {"predictions": model(images, training=False)}
-
-    try:
-        if hasattr(model, "export"):
-            model.export(str(saved_model_path))
-        else:
-            tf.saved_model.save(
-                model,
-                str(saved_model_path),
-                signatures={"serving_default": serving_fn},
-            )
     except Exception as exc:
-        print(f"Error: could not save TensorFlow SavedModel to '{saved_model_path}': {exc}")
+        print(f"Error: training or saving failed: {exc}")
         return 1
 
-    command = [
-        "tensorflowjs_converter",
-        "--input_format", "tf_saved_model",
-        "--output_format", "tfjs_graph_model",
-        "--signature_name", "serving_default",
-        "--quantization_bytes=2",
-        str(saved_model_path),
-        str(tfjs_path),
-    ]
-
-    print("Converting SavedModel to TensorFlow.js graph model...")
-    try:
-        subprocess.run(command, check=True)
-    except FileNotFoundError:
-        print("Error: tensorflowjs_converter was not found. Install it with 'python -m pip install tensorflowjs' and rerun.")
-        return 1
-    except subprocess.CalledProcessError as exc:
-        print(f"Error: tensorflowjs_converter failed with exit code {exc.returncode}.")
-        return 1
-
-    print("Training and conversion completed successfully.")
+    print("Training completed successfully.")
     print(f"Classes: {len(class_names)}")
-    print(f"SavedModel: {saved_model_path}")
-    print(f"TensorFlow.js model: {tfjs_path}")
-    print(f"Class names: {class_names_path}")
+    print(f"Model: {model_path}")
+    print(f"Class names: {classes_path}")
     return 0
 
 

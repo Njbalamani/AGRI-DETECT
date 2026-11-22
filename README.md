@@ -2,7 +2,7 @@
 
 AI-powered crop health scanner for Tamil Nadu farmers, built by **Ulavan Tech**. The complete Django project is inside the [`agri/`](agri) folder.
 
-The core app works offline with an on-device TensorFlow.js model, a multilingual crop/problem knowledge base, chat, field history, reminders, CSV export, and optional Django history sync.
+The app uses a Python/Django ML backend for photo analysis, with a multilingual crop/problem knowledge base, chat, field history, reminders, CSV export, and Django history sync. Knowledge, chat and history work offline; ML detection requires the Django server.
 
 | Item | Details |
 |---|---|
@@ -10,8 +10,8 @@ The core app works offline with an on-device TensorFlow.js model, a multilingual
 | Maintainer | **N J BALA MANIKANTAN** |
 | Organization | Ulavan Tech |
 | Project folder | [`agri/`](agri) |
-| Backend | Django |
-| Frontend | Vanilla JavaScript, HTML, CSS, TensorFlow.js |
+| Backend | Django + Python ML (Pillow, NumPy, optional TensorFlow) |
+| Frontend | Vanilla JavaScript, HTML, CSS |
 | Languages | English, Tamil, Hindi, Telugu, Kannada, Malayalam, Bengali, Marathi |
 | Offline support | Service worker PWA |
 | License | [MIT](LICENSE) |
@@ -27,18 +27,24 @@ AGRI-DETECT/
 ├─ LICENSE                           # MIT license in maintainer name
 └─ agri/                             # complete Django application
    ├─ manage.py                      # Django command-line entry point
-   ├─ requirements.txt               # Python dependencies
+   ├─ requirements.txt               # Python web + image dependencies
+   ├─ requirements-ml.txt            # optional TensorFlow training stack
    ├─ agri_project/                  # project settings and URL root
    │  ├─ settings.py
    │  ├─ urls.py
    │  ├─ asgi.py
    │  └─ wsgi.py
-   ├─ core/                          # pages, assets and sync API
-   │  ├─ models.py                   # InspectionRecord sync model
-   │  ├─ views.py                    # page + /api/history/sync handlers
-   │  ├─ urls.py
-   │  ├─ tests.py
-   │  └─ migrations/
+    ├─ core/                          # pages, assets, sync API and ML API
+    │  ├─ models.py                   # InspectionRecord sync model
+    │  ├─ views.py                    # pages + /api/history/sync + /api/ml/* handlers
+    │  ├─ urls.py
+    │  ├─ tests.py
+    │  └─ migrations/
+    ├─ ml/                            # Python-only ML inference and training
+    │  ├─ predict.py                  # image analysis + health/disease inference
+    │  ├─ train.py                    # trains health.keras from class folders
+    │  ├─ evaluate.py                 # evaluates a trained health model
+    │  └─ __init__.py
    ├─ templates/                     # Django page templates
    │  ├─ index.html
    │  ├─ detection.html
@@ -48,13 +54,12 @@ AGRI-DETECT/
    ├─ static/agri/                   # browser application and assets
    │  ├─ index.html, detection.html, history.html, settings.html, about.html
    │  ├─ app.js                      # shared app state, notifications, language switch
-   │  ├─ detection.js                # capture, model inference, analysis, result
-   │  ├─ history.js                  # filters, CSV, follow-ups, sync
-   │  ├─ chatbot.js                  # offline multilingual knowledge chatbot
-   │  ├─ langs.js, problems*.js      # 8-language UI + crop/problem data
-   │  ├─ service-worker.js           # offline PWA cache + reminders
-   │  ├─ models/plant-health/        # bundled TF.js health model
-   │  ├─ images/, icons/, vendor/    # crop photos, PWA icons, TF.js bundle
+    │  ├─ detection.js                # capture, Python ML API client, analysis, result
+    │  ├─ history.js                  # filters, CSV, follow-ups, sync
+    │  ├─ chatbot.js                  # offline multilingual knowledge chatbot
+    │  ├─ langs.js, problems*.js      # 8-language UI + crop/problem data
+    │  ├─ service-worker.js           # offline PWA cache + reminders
+    │  ├─ images/, icons/, vendor/    # crop photos and PWA icons
    │  ├─ tests/                      # zero-dependency Node test runner
    │  ├─ README.md                   # detailed app documentation
    │  ├─ REPORT.md                   # project report
@@ -74,17 +79,19 @@ AGRI-DETECT/
 | `README.md` | Documentation | Repository overview, diagrams, commands, tables and license information. |
 | `LICENSE` | Legal | MIT license owned by **N J BALA MANIKANTAN**. |
 | `agri/manage.py` | Django CLI | Runs migrations, checks, tests and the development server. |
-| `agri/requirements.txt` | Dependencies | Declares Django as the Python dependency. |
+| `agri/requirements.txt` | Dependencies | Declares Django, Pillow and NumPy as Python dependencies. |
+| `agri/requirements-ml.txt` | Dependencies | Optional TensorFlow stack for training/evaluating models. |
 | `agri/agri_project/settings.py` | Configuration | Security settings, static file routing, host and debug environment variables. |
 | `agri/agri_project/urls.py` | Routing | Includes app routes and keeps API routes before the static catch-all. |
 | `agri/core/models.py` | Database | Defines `InspectionRecord` for history synchronization. |
-| `agri/core/views.py` | Backend logic | Serves pages/static assets and handles `GET/POST /api/history/sync`. |
-| `agri/core/urls.py` | Routing | Maps pages and the history sync API. |
-| `agri/core/tests.py` | Tests | Django page, asset, template-consistency and sync API tests. |
+| `agri/core/views.py` | Backend logic | Serves pages/static assets and handles history sync and Python ML API routes. |
+| `agri/core/urls.py` | Routing | Maps pages, `/api/history/sync`, `/api/ml/status` and `/api/ml/predict`. |
+| `agri/core/tests.py` | Tests | Django page, asset, template-consistency, ML API and sync API tests. |
 | `agri/core/migrations/` | Database | Stores the `InspectionRecord` schema migration. |
+| `agri/ml/` | Python ML | Image analysis, inference, training and evaluation without browser ML. |
 | `agri/templates/` | Django templates | Server-rendered copies of the five browser pages. |
-| `agri/static/agri/` | Frontend | Browser app, assets, localization data, model files and tests. |
-| `agri/tools/` | ML tooling | Converts feedback into datasets and trains an optional disease classifier. |
+| `agri/static/agri/` | Frontend | Browser app, assets, localization data and tests. |
+| `agri/tools/` | ML tooling | Converts feedback into datasets and trains an optional Python disease classifier. |
 
 ---
 
@@ -98,11 +105,13 @@ graph TD
 
     APP --> CONF[agri_project/]
     APP --> CORE[core/]
+    APP --> PYML[ml/ Python ML]
     APP --> TPL[templates/]
     APP --> STATIC[static/agri/]
     APP --> TOOLS[tools/]
     APP --> CLI[manage.py]
     APP --> REQ[requirements.txt]
+    APP --> REQML[requirements-ml.txt]
 
     CONF --> SET[settings.py]
     CONF --> URLS[urls.py]
@@ -110,10 +119,14 @@ graph TD
     CONF --> WSGI[wsgi.py]
 
     CORE --> MODEL[InspectionRecord model]
-    CORE --> VIEW[Pages + history sync API]
+    CORE --> VIEW[Pages + history/ML APIs]
     CORE --> CURLS[core/urls.py]
     CORE --> TEST[Django tests]
     CORE --> MIG[migrations/]
+
+    PYML --> PREDICT[predict.py]
+    PYML --> TRAIN[train.py]
+    PYML --> EVAL[evaluate.py]
 
     TPL --> INDEX[index.html]
     TPL --> DET_HTML[detection.html]
@@ -129,12 +142,11 @@ graph TD
     STATIC --> I18N[i18n.js]
     STATIC --> LANG[8-language data]
     STATIC --> SW[service worker]
-    STATIC --> ML[bundled TF.js model]
     STATIC --> ASSETS[images, icons, vendor]
     STATIC --> JS_TEST[Node tests]
 
     TOOLS --> FEEDBACK[Feedback dataset builder]
-    TOOLS --> TRAIN[Optional disease classifier trainer]
+    TOOLS --> DIS_TRAIN[Optional Python disease trainer]
 ```
 
 ---
@@ -146,10 +158,11 @@ flowchart TD
     A[Open app] --> B[Select crop]
     B --> C[Guided 6-photo capture]
     C --> D[Resize images in browser]
-    D --> E{Gemini provider explicitly selected?}
+    D --> D2[POST /api/ml/predict]
+    D2 --> E{Gemini provider explicitly selected?}
 
     E -- Yes --> F[Optional AI vision analysis]
-    E -- No --> G[On-device MobileNetV2 + pixel checks]
+    E -- No --> G[Python image analysis + pixel checks]
 
     F --> H[Confidence clamping + safety gates]
     G --> H
@@ -186,7 +199,7 @@ flowchart TD
 | `static/agri/settings.html` | AI provider, Gemini key and reminder settings. |
 | `static/agri/about.html` | Project information and model description. |
 | `static/agri/app.js` | Shared state, language switching, notifications and follow-up checks. |
-| `static/agri/detection.js` | Camera flow, image analysis, model inference and result rendering. |
+| `static/agri/detection.js` | Camera flow, Python ML API client, image analysis and result rendering. |
 | `static/agri/history.js` | History storage, filters, CSV export, rechecks and sync merge. |
 | `static/agri/chatbot.js` | Offline multilingual chatbot and optional Gemini answers. |
 | `static/agri/i18n.js` | Language engine that translates `[data-i18n]` elements. |
@@ -196,10 +209,8 @@ flowchart TD
 | `static/agri/manifest.json` | PWA name, icons and display settings. |
 | `static/agri/styles.css` | Complete responsive UI styling. |
 | `static/agri/tests/run-tests.js` | Zero-dependency Node test runner. |
-| `static/agri/models/plant-health/` | Bundled TensorFlow.js health classifier. |
 | `static/agri/images/` | Crop photos used by the UI. |
 | `static/agri/icons/` | PWA icons. |
-| `static/agri/vendor/tf.min.js` | Vendored TensorFlow.js bundle. |
 
 ---
 
@@ -213,10 +224,13 @@ flowchart TD
 | `agri_project/wsgi.py` | WSGI entry point for production servers. |
 | `core/apps.py` | Django app configuration. |
 | `core/models.py` | `InspectionRecord` model for synced field records. |
-| `core/views.py` | Page views, asset serving and history sync API. |
+| `core/views.py` | Page views, asset serving, history sync API and Python ML API. |
 | `core/urls.py` | Page and API URL patterns. |
 | `core/tests.py` | Django test suite. |
 | `core/migrations/0001_initial.py` | Creates the `InspectionRecord` table. |
+| `ml/predict.py` | Python image analysis, model loading and disease prediction. |
+| `ml/train.py` | Trains the Python health classifier. |
+| `ml/evaluate.py` | Evaluates a trained Python health classifier. |
 
 ---
 
@@ -234,6 +248,9 @@ Run these commands from the `agri/` folder.
 | `python manage.py runserver 0.0.0.0:8000` | Phone/LAN testing | Makes the dev server reachable from other devices. |
 | `python manage.py test` | Before every commit | Runs all Django tests. |
 | `python manage.py test core.tests.AgriHistorySyncTests` | API-only verification | Runs only history sync API tests. |
+| `python -m ml.train --data dataset/health` | Training a Python health model | Writes `ml_models/health.keras`. |
+| `python -m ml.evaluate --data dataset/health` | Checking trained health accuracy | Evaluates `ml_models/health.keras`. |
+| `python tools/train_disease_classifier.py --data dataset/disease` | Training a Python disease model | Writes `ml_models/disease.keras` plus class names. |
 | `python manage.py createsuperuser` | If admin access is needed | Creates a Django admin user. |
 | `python manage.py shell` | Debugging | Opens a Python shell with Django loaded. |
 | `python manage.py dbshell` | Database debugging | Opens the configured database shell. |
@@ -344,26 +361,32 @@ The project uses `APPEND_SLASH = False`, so use `/api/history/sync` without a tr
 |---|---|---|
 | Node unit tests | `node static/agri/tests/run-tests.js` | `48 passed, 0 failed` |
 | Django configuration | `python manage.py check` | `System check identified no issues` |
-| Django full suite | `python manage.py test` | `9 tests OK` |
+| Django full suite | `python manage.py test` | `15 tests OK` |
 | Django sync API only | `python manage.py test core.tests.AgriHistorySyncTests` | 3 sync API tests OK |
+| Python ML logic/API | `python manage.py test core.tests.AgriMlLogicTests core.tests.AgriMlApiTests` | 6 ML tests OK |
 
 ---
 
 ## Optional ML tooling
 
-The bundled app already contains the trained health classifier. The scripts in `agri/tools/` are optional helpers for future improvement:
+Python owns all ML inference. Without a trained `.keras` file, `/api/ml/predict` still returns a deterministic Pillow/NumPy signal result from `ml/predict.py`. The training scripts are optional:
 
 ```bash
+pip install -r requirements-ml.txt
 python tools/prepare_feedback_dataset.py
-python tools/train_disease_classifier.py --data dataset/disease --output static/agri/models/disease
+python -m ml.train --data dataset/health
+python -m ml.evaluate --data dataset/health
+python tools/train_disease_classifier.py --data dataset/disease
 ```
 
 | Script | Input | Output | Requires |
 |---|---|---|---|
 | `prepare_feedback_dataset.py` | Feedback NDJSON log | `images/<label>/` plus `manifest.csv` | Python standard library |
-| `train_disease_classifier.py` | Labeled image class folders | TF.js graph model plus `class_names.json` | TensorFlow and `tensorflowjs_converter` |
+| `ml/train.py` | `healthy/` and `diseased/` image folders | `ml_models/health.keras` plus class names | `requirements-ml.txt` |
+| `ml/evaluate.py` | Labeled health image folders | Loss and accuracy report | `requirements-ml.txt` and a trained model |
+| `tools/train_disease_classifier.py` | Labeled disease class folders | `ml_models/disease.keras` plus `disease_classes.json` | `requirements-ml.txt` |
 
-Detection uses the optional classifier only when `static/agri/models/disease/tfjs_model/model.json` and `class_names.json` are present.
+Detection uses `ml_models/health.keras` and `ml_models/disease.keras` when present; both are optional and are never bundled as browser assets.
 
 ---
 

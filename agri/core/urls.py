@@ -10,5 +10,7 @@ urlpatterns = [
     path("about.html", views.about, name="about"),
     path("settings.html", views.settings_page, name="settings"),
     path("api/history/sync", views.history_sync, name="history-sync"),
+    path("api/ml/status", views.ml_status, name="ml-status"),
+    path("api/ml/predict", views.ml_predict, name="ml-predict"),
     re_path(r"^(?P<path>.+)$", views.asset, name="asset"),
 ]

@@ -3,9 +3,11 @@ import json
 from django.conf import settings
 from django.db import transaction
 from django.http import HttpResponseBadRequest, HttpResponseNotAllowed, JsonResponse
+from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import TemplateView
 from django.views.static import serve
 
+from ml import analyse_images, model_status as ml_model_status
 from .models import InspectionRecord
 
 
@@ -85,6 +87,33 @@ def history_sync(request):
 
     records = InspectionRecord.objects.all().order_by("-source_updated_at")[:200]
     return JsonResponse({"ok": True, "saved": len(saved), "records": [record.to_sync_dict() for record in records]})
+
+
+def ml_status(request):
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+    return JsonResponse({"ok": True, **ml_model_status()})
+
+
+@csrf_exempt
+def ml_predict(request):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    if _as_int(request.META.get("CONTENT_LENGTH"), 0) > 3000000:
+        return HttpResponseBadRequest("payload too large")
+    try:
+        data = json.loads(request.body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return HttpResponseBadRequest("invalid JSON")
+    if not isinstance(data, dict) or not isinstance(data.get("images"), list):
+        return HttpResponseBadRequest("images must be a list")
+    if not data["images"] or len(data["images"]) > 6:
+        return HttpResponseBadRequest("provide between 1 and 6 images")
+    try:
+        result = analyse_images(data["images"])
+    except ValueError as exc:
+        return HttpResponseBadRequest(str(exc))
+    return JsonResponse({"ok": True, **result})
 
 
 home = TemplateView.as_view(template_name="index.html")

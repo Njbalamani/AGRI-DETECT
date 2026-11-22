@@ -393,7 +393,7 @@ function renderReview() {
 }
 
 /* ---------------------------- Analysis ---------------------------- */
-/* Real on-device per-photo image analysis: computes crown greenness,
+/* Real per-photo image analysis: computes crown greenness,
    damage/lesion ratio (brown/dark necrotic pixels) and photo sharpness
    (blur) from the actual pixel data. Returns a 0..1 health score. */
 function imageHealthScore(dataUrl) {
@@ -465,145 +465,71 @@ function healthToRisk(h) {
   return { risk: "high", conf: Math.min(100, 60 + Math.round((1 - score) * 100)) };
 }
 
-/* ------------------- Bundled on-device AI model -------------------
-   PlantVillage-trained healthy/diseased classifier (MobileNetV2 head,
-   96x96, [-1,1] input, single sigmoid output = P(healthy)). Loaded
-   lazily after page load; all failure is silent so detection always
-   falls back to pixel health analysis. */
-let detectionModel = null;
-const MODEL_VERSION = "v43";
-const MODEL_URL = "models/plant-health/model.json";
-let diseaseModel = null;
-let diseaseClassNames = [];
-let diseaseInitStarted = false;
-const DISEASE_MODEL_URL = "models/disease/tfjs_model/model.json";
-const DISEASE_CLASSES_URL = "models/disease/class_names.json";
+const ML_STATUS_URL = "/api/ml/status";
+const ML_PREDICT_URL = "/api/ml/predict";
+const MODEL_VERSION = "py43";
+let mlStatus = null;
 
 async function initDetectionModel() {
-  if (detectionModel || !(window.tf && typeof tf.loadGraphModel === "function")) return;
+  if (mlStatus || typeof window.fetch !== "function") return;
   try {
-    detectionModel = await tf.loadGraphModel(MODEL_URL);
-    window.detectionModel = detectionModel;
+    const res = await window.fetch(ML_STATUS_URL);
+    if (res && res.ok) mlStatus = await res.json();
   } catch (e) {
-    detectionModel = null;
-    window._modelErr = (e && e.message) || "load failed";
-  }
-}
-
-async function initDiseaseModel() {
-  if (diseaseModel || diseaseInitStarted) return;
-  diseaseInitStarted = true;
-  if (!(window.tf && typeof tf.loadGraphModel === "function")) return;
-  if (typeof window.fetch !== "function") return;
-  try {
-    const res = await window.fetch(DISEASE_CLASSES_URL);
-    if (!res || !res.ok) return;
-    const names = await res.json();
-    if (!Array.isArray(names) || names.length < 2) return;
-    diseaseClassNames = names.map(String).slice(0, 200);
-    diseaseModel = await tf.loadGraphModel(DISEASE_MODEL_URL);
-    window.diseaseModel = diseaseModel;
-  } catch (e) {
-    diseaseModel = null;
-    diseaseClassNames = [];
-    window._diseaseModelErr = (e && e.message) || "load failed";
+    mlStatus = { ok: false, backend: "python", health_model: false, disease_model: false };
   }
 }
 
 function modelStatus() {
+  const s = mlStatus || {};
   return {
-    loaded: !!detectionModel,
-    version: MODEL_VERSION,
-    diseaseLoaded: !!diseaseModel,
-    diseaseClasses: diseaseClassNames.slice(),
+    loaded: !!s.health_model,
+    version: s.version || MODEL_VERSION,
+    diseaseLoaded: !!s.disease_model,
+    diseaseClasses: Array.isArray(s.disease_classes) ? s.disease_classes.slice() : [],
+    backend: s.backend || "python",
   };
 }
 
-/* Per-photo model inference: returns 0..1 P(healthy) or null on any failure. */
-function imageModelHealth(dataUrl) {
-  return new Promise((resolve) => {
-    if (!detectionModel) { resolve(null); return; }
-    const img = new Image();
-    img.onload = () => {
-      try {
-        const S = 96;
-        const c = document.createElement("canvas"); c.width = c.height = S;
-        const ctx = c.getContext("2d", { willReadFrequently: true });
-        ctx.drawImage(img, 0, 0, S, S);
-        const px = ctx.getImageData(0, 0, S, S).data;
-        const data = new Float32Array(S * S * 3);
-        for (let i = 0, j = 0; i < px.length; i += 4) {
-          data[j++] = (px[i] / 127.5) - 1;
-          data[j++] = (px[i + 1] / 127.5) - 1;
-          data[j++] = (px[i + 2] / 127.5) - 1;
-        }
-        const t = tf.tensor4d(data, [1, S, S, 3]);
-        const out = detectionModel.predict(t);
-        const v = out.dataSync()[0];
-        t.dispose(); out.dispose();
-        resolve(v);
-      } catch (e) { resolve(null); }
-    };
-    img.onerror = () => resolve(null);
-    img.src = dataUrl;
-  });
+async function predictFromApi(dataUrls) {
+  if (typeof window.fetch !== "function") return null;
+  try {
+    const res = await window.fetch(ML_PREDICT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ images: dataUrls.slice(0, 6) }),
+    });
+    if (!res || !res.ok) return null;
+    const data = await res.json();
+    return data && data.ok ? data : null;
+  } catch (e) {
+    return null;
+  }
 }
 
-function classifyDisease(dataUrl) {
-  return new Promise((resolve) => {
-    if (!diseaseModel || !diseaseClassNames.length) { resolve(null); return; }
-    const img = new Image();
-    img.onload = () => {
-      try {
-        const S = 224;
-        const c = document.createElement("canvas"); c.width = c.height = S;
-        const ctx = c.getContext("2d", { willReadFrequently: true });
-        ctx.drawImage(img, 0, 0, S, S);
-        const px = ctx.getImageData(0, 0, S, S).data;
-        const data = new Float32Array(S * S * 3);
-        for (let i = 0, j = 0; i < px.length; i += 4) {
-          data[j++] = px[i];
-          data[j++] = px[i + 1];
-          data[j++] = px[i + 2];
-        }
-        const t = tf.tensor4d(data, [1, S, S, 3]);
-        const out = diseaseModel.predict(t);
-        const values = Array.from(out.dataSync());
-        t.dispose(); out.dispose();
-        let best = 0;
-        for (let i = 1; i < values.length; i++) if (values[i] > values[best]) best = i;
-        resolve({
-          name: diseaseClassNames[best] || "unknown",
-          confidence: Math.max(0, Math.min(1, Number(values[best]) || 0)),
-        });
-      } catch (e) { resolve(null); }
-    };
-    img.onerror = () => resolve(null);
-    img.src = dataUrl;
-  });
+async function classifyDisease(dataUrl) {
+  if (!dataUrl) return null;
+  const result = await predictFromApi([dataUrl]);
+  return result && result.disease ? result.disease : null;
 }
 
-function localAnalyse() {
+function localAnalyse(ml) {
   return Promise.all(shots.map(imageHealthScore)).then(async (metrics) => {
     const n = metrics.length;
-    /* Blend in the trained model when it is ready: confident model verdicts
-       (>=0.6 healthy / <=0.4 diseased) steer the per-photo health score,
-       keeping the pixel analysis as the tie-breaker in between. */
     let modelUsed = false;
-    if (detectionModel) {
-      const mh = await Promise.all(shots.map(imageModelHealth));
-      const ok = mh.filter((v) => v != null);
-      if (ok.length >= Math.min(3, n)) {
-        modelUsed = true;
-        metrics = metrics.map((m, i) => {
-          const v = (mh[i] == null) ? null : mh[i];
-          if (v == null) return m;
-          const note = v >= 0.60 ? "healthy"
-            : (v <= 0.40 ? "damage"
-            : (m.note === "blurry" ? "blurry" : m.note));
-          return Object.assign({}, m, { health: v * 0.65 + m.health * 0.35, note });
-        });
-      }
+    const details = ml && Array.isArray(ml.details) ? ml.details : [];
+    const modelDetails = details.filter((d) => d && d.source === "python_model");
+    if (modelDetails.length >= Math.min(3, n)) {
+      modelUsed = true;
+      metrics = metrics.map((m, i) => {
+        const detail = details[i];
+        if (!detail || detail.source !== "python_model") return m;
+        const v = Math.max(0, Math.min(1, Number(detail.score) || 0));
+        const note = v >= 0.60 ? "healthy"
+          : (v <= 0.40 ? "damage"
+          : (m.note === "blurry" ? "blurry" : m.note));
+        return Object.assign({}, m, { health: v * 0.65 + m.health * 0.35, note });
+      });
     }
     const clear = [], unsure = [];
     metrics.forEach((m) => {
@@ -723,7 +649,7 @@ function parseVisionJson(o) {
 
 /* Runs the optional live vision pass. Returns null (never rejects) when no
    Gemini key is configured, fetch is absent, or any part of the pipeline
-   fails — the caller then uses the on-device local analysis instead. */
+   fails — the caller then uses the Python local analysis instead. */
 function visionAnalyse(shotsToAnalyse) {
   if (typeof window.fetch !== "function") return Promise.resolve(null);
   const cfg = detectionCfg();
@@ -841,14 +767,15 @@ async function runAnalysis() {
   document.getElementById("result-icon").textContent = "🔍";
   const resized = await Promise.all(shots.map(resizeAnalyseDataUrl));
   const vision = await visionAnalyse(resized);
-  let analysis = vision || await localAnalyse();
-  /* Cross-check: if vision says "not a plant" but the on-device pixel
-     analysis begs to differ (pixels clearly show green foliage — e.g. an
+  const ml = await predictFromApi(resized);
+  let analysis = vision || await localAnalyse(ml);
+  /* Cross-check: if vision says "not a plant" but the Python image analysis
+     begs to differ (pixels clearly show green foliage — e.g. an
      unusual crop, a tight close-up, or a far palm), prefer the pixel
      reading so a real healthy plant is never dismissed. */
   if (analysis && analysis.risk === "no_plant" && analysis.method === "vision") {
     try {
-      const local = await localAnalyse();
+      const local = await localAnalyse(ml);
       if (local && !(local.risk === "no_plant")) {
         analysis = local;
       }
@@ -859,7 +786,7 @@ async function runAnalysis() {
   const confidence = Math.max(0, Math.min(100, Number(analysis.confidence) || 0));
   const query = cropFromQuery();
   const guidance = cropGuidance(query.cropId, risk);
-  const disease = risk === "no_plant" ? null : await classifyDisease(resized.find(Boolean) || shots.find(Boolean));
+  const disease = risk === "no_plant" ? null : (ml ? ml.disease : null);
   document.getElementById("result-icon").textContent = meta.icon;
   document.getElementById("result-badge").textContent = meta.label;
   document.getElementById("result-badge").className = "risk-badge " + risk;
@@ -1100,7 +1027,7 @@ window.agriTest = {
   getShots: function () { return shots; },
   localAnalyse: localAnalyse,
   imageHealthScore: imageHealthScore,
-  imageModelHealth: imageModelHealth,
+  predictFromApi: predictFromApi,
   healthToRisk: healthToRisk,
   extractJson: extractJson,
   parseVisionJson: parseVisionJson,
@@ -1114,7 +1041,6 @@ window.agriTest = {
   saveToHistory: saveToHistory,
   modelStatus: modelStatus,
   classifyDisease: classifyDisease,
-  initDiseaseModel: initDiseaseModel,
 };
 
 /* init */
@@ -1124,6 +1050,5 @@ window.agriTest = {
     // sensors unavailable => text-only manual mode
     document.getElementById("status-line").textContent = t("sensor_unavailable");
   }
-  initDetectionModel();   // lazy: start loading the bundled health model, never blocks
-  initDiseaseModel();
+  initDetectionModel();
 })();

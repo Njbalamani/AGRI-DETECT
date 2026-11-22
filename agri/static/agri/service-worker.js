@@ -1,7 +1,7 @@
 /* AGRI DETECT (Ulavan Tech) — offline-first service worker.
    Cache-first for same-origin GETs, network-first for page navigations,
    so the app works fully offline after first visit. */
-const VERSION = "agridetect-v48";
+const VERSION = "agridetect-v49";
 const CORE = [
   "./",
   "index.html",
@@ -19,11 +19,7 @@ const CORE = [
   "detection.js",
   "history.js",
   "sw-register.js",
-  "manifest.json",
-  "vendor/tf.min.js",
-  "models/plant-health/model.json",
-  "models/plant-health/group1-shard1of2.bin",
-  "models/plant-health/group1-shard2of2.bin"
+  "manifest.json"
 ];
 
 self.addEventListener("install", function (e) {

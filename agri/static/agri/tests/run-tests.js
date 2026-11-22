@@ -295,7 +295,7 @@ test("markFollowUpDone persists the acknowledgement for a due record", () => {
   assert.strictEqual(window.historyTest.loadHistory()[0].followUpDone, true);
 });
 
-test("historyMethodLabel includes the on-device AI model label", () => {
+test("historyMethodLabel includes the Python AI model label", () => {
   assert.strictEqual(window.historyTest.historyMethodLabel("model"), t("method_model"));
   assert.strictEqual(window.historyTest.historyMethodLabel("vision"), t("method_vision"));
   assert.strictEqual(window.historyTest.historyMethodLabel(""), "");
@@ -366,8 +366,8 @@ test("imageHealthScore never throws and returns neutral defaults on decode error
   assert.strictEqual(m.health, 0.5);
 });
 
-test("imageModelHealth resolves null when no on-device model is loaded", async () => {
-  assert.strictEqual(await imageModelHealth("data:image/jpeg;base64,X"), null);
+test("predictFromApi resolves null when the Python ML API is unreachable", async () => {
+  assert.strictEqual(await window.agriTest.predictFromApi(["data:image/jpeg;base64,X"]), null);
 });
 
 test("localAnalyse NOT-A-PLANT gate returns no_plant for non-plant photos", async () => {
@@ -423,7 +423,7 @@ test("cropGuidance adds crop-specific watch-outs but skips no_plant", () => {
   assert.strictEqual(window.agriTest.cropGuidance("date-palm", "no_plant"), "");
 });
 
-test("vision analysis stays on-device when provider is free even if a key exists", async () => {
+test("vision analysis stays browser-local when provider is free even if a key exists", async () => {
   localStorage.setItem("ulavanChatCfg", JSON.stringify({
     provider: "free",
     geminiKey: "AIzaTEST",
@@ -510,8 +510,12 @@ test("live chat is enabled only for the explicitly selected Gemini provider", ()
   assert.strictEqual(window.cbTest.liveProviderEnabled({ provider: "gemini", geminiKey: "" }), false);
 });
 
-test("the on-device model is never auto-loaded without TensorFlow.js", () => {
+test("detection.js has no TensorFlow.js browser model code", () => {
+  const src = fs.readFileSync(path.join(__dirname, "../detection.js"), "utf8");
   assert.strictEqual(window.tf, undefined);
+  assert.ok(!src.includes("tf.min.js"));
+  assert.ok(!src.includes("tensor"));
+  assert.ok(!src.includes("tf.loadGraphModel"));
 });
 
 test("new UI keys resolve in all eight languages", () => {
@@ -530,10 +534,11 @@ test("new UI keys resolve in all eight languages", () => {
   window.LANG = old;
 });
 
-test("modelStatus reports the bundled model version without loading TensorFlow.js", () => {
+test("modelStatus reports the Python ML backend without browser ML assets", () => {
   const status = window.agriTest.modelStatus();
+  assert.strictEqual(status.backend, "python");
   assert.strictEqual(status.loaded, false);
-  assert.strictEqual(status.version, "v43");
+  assert.strictEqual(status.version, "py43");
   assert.deepStrictEqual(status.diseaseClasses, []);
 });
 
