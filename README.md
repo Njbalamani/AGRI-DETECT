@@ -372,9 +372,74 @@ python manage.py runserver
 | `/about.html` | GET | Project information page. |
 | `/api/history/sync` | POST | Uploads local records and returns merged server records. |
 | `/api/history/sync?since=0` | GET | Fetches records changed after the given timestamp. |
+| `/api/ml/status` | GET | Reports the Python backend and optional model availability. |
+| `/api/ml/predict` | POST | Analyses 1 to 6 image data URLs and returns risk, confidence and optional disease data. |
 | `/<asset_path>` | GET | Serves files from `static/agri/`. |
 
-The project uses `APPEND_SLASH = False`, so use `/api/history/sync` without a trailing slash.
+The project uses `APPEND_SLASH = False`, so use API routes without a trailing slash.
+
+### Python ML API examples
+
+Check backend status:
+
+```bash
+curl http://127.0.0.1:8000/api/ml/status
+```
+
+Example response:
+
+```json
+{
+  "ok": true,
+  "version": "py43",
+  "backend": "python",
+  "health_model": false,
+  "disease_model": false,
+  "health_model_path": "ml_models/health.keras",
+  "disease_model_path": "ml_models/disease.keras",
+  "health_error": "model file not found",
+  "disease_error": "model file not found",
+  "disease_classes": []
+}
+```
+
+Analyse one or more image data URLs:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/ml/predict \
+  -H "Content-Type: application/json" \
+  -d "{\"images\":[\"data:image/jpeg;base64,....\"]}"
+```
+
+Example response:
+
+```json
+{
+  "ok": true,
+  "risk": "low",
+  "confidence": 87,
+  "score": 0.91,
+  "method": "local",
+  "model_used": false,
+  "error": null,
+  "disease": null,
+  "details": [
+    { "score": 0.91, "source": "python_signal" }
+  ]
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `risk` | `low`, `medium`, `high` or `no_plant`. |
+| `confidence` | Clamped confidence from 0 to 100. |
+| `score` | Average Python health score from 0 to 1. |
+| `method` | `model` when a trained Keras model contributed; otherwise `local`. |
+| `model_used` | Whether `python_model` results were used. |
+| `disease` | Optional prediction with `name` and `confidence`; `null` without a disease model. |
+| `details` | Per-image score and source: `python_model` or `python_signal`. |
+
+Invalid payloads return HTTP 400 with a plain-text reason, such as `images must be a list` or `provide between 1 and 6 images`.
 
 ---
 
