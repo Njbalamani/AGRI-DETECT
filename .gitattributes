@@ -1,3 +1,3 @@
-agri/static/agri/problems*.js linguist-language=JSON linguist-generated
-agri/static/agri/langs.js linguist-language=JSON linguist-generated
-agri/static/agri/tests/ linguist-vendored
+agri/static/agri/problems*.js linguist-generated -linguist-detectable
+agri/static/agri/langs.js linguist-generated -linguist-detectable
+agri/static/agri/tests/** linguist-vendored -linguist-detectable

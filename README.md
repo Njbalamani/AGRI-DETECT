@@ -38,6 +38,8 @@ All ML work now runs in Python/Django. TensorFlow.js was removed from the browse
 
 Final verification: Node tests `48 passed, 0 failed`; Django tests `15 tests OK`; Django check reported no issues; Python and JavaScript syntax checks passed. The update is pushed to GitHub `main`.
 
+Language-stat note: the large `problems*.js` and `langs.js` files are localization data, not application logic, so `.gitattributes` marks them as generated/non-detectable. GitHub may need a short refresh before the language bar reflects this.
+
 ---
 
 ## Repository structure
