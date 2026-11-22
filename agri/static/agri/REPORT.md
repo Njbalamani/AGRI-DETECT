@@ -1,6 +1,6 @@
 # 🌿 AGRI-DETECT — Full Development Report (Current Completion)
 
-**Repository (public):** https://github.com/CY3ER-CAT/AGRI-DETECT
+**Repository (public):** https://github.com/Njbalamani/AGRI-DETECT
 **Branch:** `main` · **Working tree:** clean, synced with GitHub
 **Project status:** 🚧 Under construction — this report documents all completed and verified work to date; remaining phases are listed explicitly at the end.
 
