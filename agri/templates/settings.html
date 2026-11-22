@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://generativelanguage.googleapis.com; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ulavan Tech — AI Settings</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1b5e20">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+</head>
+<body>
+  <header class="header">
+    <div class="header-inner">
+      <a class="logo" href="index.html">
+        <span class="logo-mark">🌿</span>
+        <div>
+          <h1>Ulavan Tech</h1>
+          <p class="logo-tagline">Tamil Nadu Crop Health Scanner</p>
+        </div>
+      </a>
+      <div id="lang-wrap"></div>
+    </div>
+    <nav class="nav">
+      <a href="index.html" data-i18n="nav_home">Home</a>
+      <a href="detection.html" data-i18n="nav_detection">Detection</a>
+      <a href="history.html" data-i18n="nav_history">History</a>
+      <a href="about.html" data-i18n="nav_project">Project</a>
+      <a href="settings.html" data-i18n="nav_settings">AI Settings</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    <section class="page-title">
+      <h2 data-i18n="set_title">⚙ AI Settings</h2>
+      <p data-i18n="set_lead">Power the smart scan and chat assistant. Changes are saved automatically on every keystroke.</p>
+    </section>
+
+    <section id="settings" class="settings open" aria-label="AI settings">
+      <div id="settings-head" class="settings-head">
+        <h3 data-i18n="set_title">⚙ AI Settings</h3>
+        <span class="gear">⚙</span>
+      </div>
+      <div class="settings-body">
+        <p class="settings-note" data-i18n="set_note">Add a free Gemini key to power the smart scan and chat assistant. Leave empty to use the built-in free helper.</p>
+        <div class="settings-field">
+          <label for="set-provider" data-i18n="set_provider">AI provider</label>
+          <select id="set-provider">
+            <option value="free">Free helper (no key)</option>
+            <option value="gemini">Gemini</option>
+          </select>
+        </div>
+        <div class="settings-field">
+          <label for="set-gemini-key" data-i18n="set_gemini_key">Gemini API key</label>
+          <div class="key-wrap">
+            <input id="set-gemini-key" type="password" autocomplete="off" spellcheck="false"
+                   placeholder="AIza…" data-i18n-placeholder="set_gemini_ph">
+            <button id="toggle-key-vis" class="key-toggle" type="button" aria-label="Show/hide key" tabindex="0">👁</button>
+          </div>
+          <a class="settings-link" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener"
+             data-i18n="set_get_key">Get a free Gemini key →</a>
+        </div>
+        <div class="settings-field">
+          <label for="set-gemini-model" data-i18n="set_gemini_model">Gemini model
+            <span class="model-lock" title="Fixed model — read-only">🔒</span></label>
+          <input id="set-gemini-model" type="text" autocomplete="off" spellcheck="false" readonly
+                 placeholder="gemini-3.6-flash" data-i18n-placeholder="set_gemini_mph">
+        </div>
+        <div class="settings-row">
+          <button id="settings-save" class="settings-save" data-i18n="set_save">Save</button>
+          <span id="settings-saved" class="settings-saved hidden">✓ Saved</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="reminders" class="settings open" aria-label="Recheck reminders">
+      <div class="settings-head">
+        <h3 data-i18n="rem_title">🕒 48-hour recheck reminders</h3>
+        <span class="gear">🕒</span>
+      </div>
+      <div class="settings-body">
+        <p class="settings-note" data-i18n="rem_lead">Get a reminder when a medium/high-risk palm is due its 48-hour recheck.</p>
+        <div class="settings-row">
+          <button id="enable-reminders" class="settings-save" data-i18n="rem_enable">Enable reminders</button>
+          <span id="reminder-status" class="settings-saved hidden">✓</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+<script src="problems.js"></script>
+  <script src="langs.js"></script>
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+  <script src="chat-key.js"></script>
+  <script src="chatbot.js"></script>
+  <script src="sw-register.js"></script>
+</body>
+</html>
